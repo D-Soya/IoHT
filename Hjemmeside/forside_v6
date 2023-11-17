@@ -112,6 +112,13 @@
 
 <script>
   document.addEventListener('DOMContentLoaded', function () {
+    // Initialize variables to store previous data
+    var prevUltrasonicData = null;
+    var prevDht11Data = {
+      temperature: null,
+      humidity: null
+    };
+
     function addToLog(logId, data) {
       var log = document.getElementById(logId);
       var listItem = document.createElement('li');
@@ -139,8 +146,21 @@
             humidity: data.humidity !== null ? parseFloat(data.humidity) : 'NaN'
           };
 
-          addToLog('distanceLog', 'Afstand: ' + ultrasonicData + ' cm');
-          addToLog('temperatureHumidityLog', 'Temperatur: ' + dht11Data.temperature + '°C, Fugtighed: ' + dht11Data.humidity);
+          // Log only if there is a change in data
+          if (ultrasonicData !== prevUltrasonicData) {
+            addToLog('distanceLog', 'Afstand: ' + ultrasonicData + ' cm');
+            prevUltrasonicData = ultrasonicData;
+          }
+
+          if (
+            dht11Data.temperature !== prevDht11Data.temperature ||
+            dht11Data.humidity !== prevDht11Data.humidity
+          ) {
+            addToLog('temperatureHumidityLog', 'Temperatur: ' + dht11Data.temperature + '°C, Fugtighed: ' + dht11Data.humidity);
+            prevDht11Data.temperature = dht11Data.temperature;
+            prevDht11Data.humidity = dht11Data.humidity;
+          }
+
           updateCurrentData(dht11Data.temperature, dht11Data.humidity, ultrasonicData);
 
           // Update emoji based on distance
