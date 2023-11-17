@@ -1,0 +1,130 @@
+from flask import Flask, render_template, jsonify
+import paho.mqtt.client as mqtt
+import sqlite3
+import os
+from datetime import datetime, timedelta, timezone
+
+
+app = Flask(__name__, template_folder='templates', static_folder='static')
+data_from_mqtt = {'distance': None, 'temperature': None, 'humidity': None}
+
+mqtt_server = "192.168.50.115"
+mqtt_port = 1883
+mqtt_user = "ioht"
+mqtt_password = "kasper3600"
+ultrasonic_topic = "ultrasonic"
+dht_topic = "dht"
+
+# SQLite database configuration
+database_path = 'ioht_database.db'
+
+def initialize_database():
+    if not os.path.exists(database_path):
+        connection = sqlite3.connect(database_path)
+        cursor = connection.cursor()
+
+        # Create the 'sensor_data' table
+        cursor.execute('''
+            CREATE TABLE sensor_data (
+                distance REAL,
+                temperature REAL,
+                humidity REAL,
+                timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+
+        connection.commit()
+        connection.close()
+
+def query_database():
+    connection = sqlite3.connect(database_path)
+    cursor = connection.cursor()
+
+    cursor.execute("SELECT distance, temperature, humidity, timestamp FROM sensor_data ORDER BY timestamp DESC")
+    result = cursor.fetchall()
+
+    connection.close()
+
+    return result
+
+def update_data_from_database():
+    db_data = query_database()
+    if db_data:
+        latest_data = db_data[0]  # Hent første række, da det er den nyeste data
+        data_from_mqtt.update({'distance': latest_data[0], 'temperature': latest_data[1], 'humidity': latest_data[2]})
+
+def insert_data_into_database(distance, temperature, humidity):
+    connection = sqlite3.connect(database_path)
+    cursor = connection.cursor()
+
+    # Insert data into the 'sensor_data' table
+    cursor.execute("INSERT INTO sensor_data (distance, temperature, humidity) VALUES (?, ?, ?)",
+                   (distance, temperature, humidity))
+
+    connection.commit()
+    connection.close()
+
+def on_connect(client, userdata, flags, rc):
+    print(f"Connected with result code {rc}")
+    client.subscribe(ultrasonic_topic)
+    client.subscribe(dht_topic)
+
+def on_message(client, userdata, msg):
+    global data_from_mqtt
+    payload = msg.payload.decode()
+
+    if msg.topic == ultrasonic_topic:
+        distance = float(payload)
+        data_from_mqtt['distance'] = distance
+    elif msg.topic == dht_topic:
+        # Check if payload contains both temperature and humidity information
+        temperature_parts = payload.split('Temperature:')
+        humidity_parts = payload.split('Humidity:')
+        
+        if len(temperature_parts) > 1 and len(humidity_parts) > 1:
+            try:
+                temperature = float(temperature_parts[1].split(',')[0])
+                humidity = float(humidity_parts[1])
+                
+                # Update the data dictionary
+                data_from_mqtt['temperature'] = temperature
+                data_from_mqtt['humidity'] = humidity
+
+                # Define the distance variable
+                distance = data_from_mqtt['distance']
+
+                # Insert data into the database
+                insert_data_into_database(distance, temperature, humidity)
+            except ValueError as e:
+                print(f"Error converting values: {e}")
+
+    print(f"Received message on topic {msg.topic}: {payload}")
+
+
+client = mqtt.Client()
+client.username_pw_set(mqtt_user, mqtt_password)
+client.on_connect = on_connect
+client.on_message = on_message
+
+client.connect(mqtt_server, mqtt_port, 60)
+client.loop_start()
+
+# Initialize the database if it does not exist
+initialize_database()
+
+# Update the host to '0.0.0.0' to make it accessible externally
+# Update the port to 2000 or any other port you prefer
+@app.route('/')
+def index():
+    update_data_from_database()
+    return render_template('index.html', dataFromMQTT=data_from_mqtt)
+
+@app.route('/get_data')
+def get_data():
+    update_data_from_database()
+    historical_data = [f"Afstand: {row[0]} cm, Temperatur: {row[1]}°C, Fugtighed: {row[2]}%, Tid: {row[3]}" for row in query_database()]
+    return jsonify({'currentData': data_from_mqtt, 'historicalData': historical_data})
+
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0', port=3000)
