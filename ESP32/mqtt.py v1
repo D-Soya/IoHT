@@ -1,0 +1,75 @@
+import network
+import machine
+import time
+from umqtt.simple import MQTTClient
+
+ssid = "Nikolaj"
+password = "wifikode"
+mqtt_server = "192.168.50.115"
+mqtt_port = 1883
+mqtt_user = "ioht"
+mqtt_password = "kasper3600"
+topic = b"ultrasonic"
+
+# Initialize WiFi
+sta_if = network.WLAN(network.STA_IF)
+sta_if.active(True)
+sta_if.connect(ssid, password)
+
+while not sta_if.isconnected():
+    pass
+
+print("Connected to WiFi")
+
+# Callback function for handling MQTT messages
+def on_message(topic, msg):
+    print(f"Received message on topic {topic}: {msg}")
+
+# Create an MQTT client instance
+client = MQTTClient("ultrasonic_sensor", mqtt_server, port=mqtt_port, user=mqtt_user, password=mqtt_password)
+client.set_callback(on_message)
+
+# Connect to the MQTT broker
+client.connect()
+
+# Subscribe to the specified topic
+client.subscribe(topic)
+
+# Initialize ultrasonic sensor
+trigger_pin = 4
+echo_pin = 5
+trigger = machine.Pin(trigger_pin, machine.Pin.OUT)
+echo = machine.Pin(echo_pin, machine.Pin.IN)
+
+try:
+    while True:
+        # Send ultrasonic signal
+        trigger.value(1)
+        time.sleep_us(10)
+        trigger.value(0)
+
+        # Wait for the echo pin to go high
+        while echo.value() == 0:
+            signal_start = time.ticks_us()
+
+        # Wait for the echo pin to go low again
+        while echo.value() == 1:
+            signal_end = time.ticks_us()
+
+        # Calculate distance based on ultrasonic signal time
+        signal_duration = time.ticks_diff(signal_end, signal_start)
+        distance = (signal_duration * 0.0343) / 2  # Factor 0.0343 converts time to distance in centimeters
+        print("Distance:", distance)
+
+        # Send data to Raspberry Pi via MQTT
+        client.publish(topic, str(distance))
+
+        # Check for incoming MQTT messages
+        client.check_msg()
+
+        time.sleep(1)  # Increase the delay to give MQTT server more time
+
+except KeyboardInterrupt:
+    print("Exiting...")
+    client.disconnect()
+
