@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Data Visualization</title>
+    <style>
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-image: url('/static/Altiden-Fribo-Holte-friplejehjem.jpg');
+            background-size: cover; /* This ensures the image covers the entire background */
+            background-repeat: no-repeat; /* Prevent the image from repeating */
+        }
+
+        .sensor-box {
+            text-align: center;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            background-color: rgba(255, 255, 255, 0.8); /* Set a semi-transparent background color for the box */
+            margin-top: 320px; /* Adjust the top margin as needed */
+        }
+    </style>
+</head>
+<body>
+    <div class="sensor-box">
+        <h1>Data from MQTT</h1>
+        <p>Sensor Distance: <span id="mqtt-data"></span></p>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+    <script>
+        function updateData() {
+            $.ajax({
+                url: "/get_data",
+                type: "GET",
+                success: function(response) {
+                    $("#mqtt-data").text(response.data);
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    console.log("Error fetching data:", textStatus, errorThrown);
+                }
+            });
+        }
+
+        // Update data every 5 seconds
+        setInterval(updateData, 2000);
+
+        // Initial update when the page loads
+        $(document).ready(function() {
+            updateData();
+        });
+    </script>
+</body>
+</html>
