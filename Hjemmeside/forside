@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Data Dashboard</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: url('Altiden-Fribo-Holte-friplejehjem.jpg') center center fixed;
+      background-size: cover;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    h1 {
+      color: white;
+      font-size: 36px;
+      margin-bottom: 20px;
+    }
+
+    .container {
+      display: flex;
+      gap: 20px;
+    }
+
+    .box {
+      background-color: rgba(255, 255, 255, 0.9);
+      border: 1px solid #dddddd;
+      padding: 20px;
+      width: 300px;
+      height: 250px;
+      overflow: auto;
+      border-radius: 15px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      transition: background-color 0.5s; /* Tilføjet overgangseffekt til baggrundsfarveændring */
+    }
+
+    ul {
+      list-style-type: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    li {
+      margin-bottom: 10px;
+      font-size: 16px;
+    }
+
+    #distanceBox,
+    #temperatureBox,
+    #currentData {
+      align-self: center;
+    }
+
+    h2 {
+      color: #333;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 10px;
+      margin-bottom: 15px;
+    }
+
+    #currentDataContent {
+      font-size: 18px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Plejehjem Dashboard</h1>
+
+<div class="container">
+  <div class="box" id="distanceBox">
+    <h2>Afstandsmåler Log</h2>
+    <ul id="distanceLog"></ul>
+  </div>
+
+  <div class="box" id="currentData">
+    <h2>Aktuel Data</h2>
+    <div id="currentDataContent"></div>
+  </div>
+
+  <div class="box" id="temperatureBox">
+    <h2>Temp og Fugitghed Log</h2>
+    <ul id="temperatureHumidityLog"></ul>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    function addToLog(logId, data) {
+      var log = document.getElementById(logId);
+      var listItem = document.createElement('li');
+      var currentTime = new Date().toLocaleString();
+      listItem.textContent = 'Beboer 12 - ' + currentTime + ' - ' + data;
+
+      // Sørg for, at nyeste data er øverst
+      log.insertBefore(listItem, log.firstChild);
+    }
+
+    function updateCurrentData(temperature, humidity, distance) {
+      var currentDataContent = document.getElementById('currentDataContent');
+      currentDataContent.textContent = 'Temperatur: ' + temperature + '°C, Fugtighed: ' + humidity + '%, Afstand: ' + distance + ' cm';
+
+      // Check om temperaturen er over 30 grader
+      if (temperature > 30) {
+        document.getElementById('currentData').style.backgroundColor = 'red';
+      } else {
+        document.getElementById('currentData').style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+      }
+    }
+
+    setInterval(function () {
+      var ultrasonicData = getUltrasonicData();
+      var dht11Data = getDHT11Data();
+
+      addToLog('distanceLog', 'Afstand: ' + ultrasonicData + ' cm');
+      addToLog('temperatureHumidityLog', 'Temperatur: ' + dht11Data.temperature + '°C, Fugtighed: ' + dht11Data.humidity);
+      updateCurrentData(dht11Data.temperature, dht11Data.humidity, ultrasonicData);
+    }, 2000);
+
+    function getUltrasonicData() {
+      return Math.floor(Math.random() * 100);
+    }
+
+    function getDHT11Data() {
+      return {
+        temperature: Math.floor(Math.random() * 30) + 20,
+        humidity: Math.floor(Math.random() * 50) + 30
+      };
+    }
+  });
+</script>
+
+</body>
+</html>
