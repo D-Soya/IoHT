@@ -1,0 +1,5 @@
+start myenv "source myenv/bin/activate"
+
+start ngrok ""ngrok http 3000"
+
+kør flask "python app.py"
