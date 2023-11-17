@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Data Dashboard</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: url('/static/Altiden-Fribo-Holte-friplejehjem.jpg') center center fixed;
+      background-size: cover;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      height: 100vh;
+      position: relative; /* Tilføjet relative position til body */
+    }
+
+    h1, h2 {
+      color: rgb(12, 12, 12);
+    }
+
+    .container {
+      display: flex;
+      gap: 20px;
+    }
+
+    .box {
+      background-color: rgba(255, 255, 255, 0.9);
+      border: 1px solid #ddd;
+      padding: 20px;
+      width: 300px;
+      height: 250px;
+      overflow: auto;
+      border-radius: 15px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    ul {
+      list-style-type: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    li {
+      margin-bottom: 10px;
+      font-size: 16px;
+    }
+
+    /* Additional styling for the header */
+    header {
+      text-align: center;
+      padding: 20px;
+      background-color: rgba(255, 255, 255, 0.9);
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      position: absolute;
+      top: 0;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    /* Styling for emoji */
+    #warningEmoji {
+      font-size: 10em;
+      position: absolute; /* Positioner emoji absolut inden i den relative container */
+      top: 200px; /* Juster toppositionen efter behov */
+      left: 50%; /* Centrer emoji vandret */
+      transform: translateX(-210%); /* Centrer emoji vandret ved at flytte den halve bredde til venstre */
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Plejehjem Dashboard</h1>
+</header>
+
+<!-- Tilføjet emoji-container -->
+<div id="warningEmoji"> 👳🏾‍♂️  </div>
+
+<div class="container">
+  <div class="box" id="distanceBox">
+    <h2>Afstandsmåler Log</h2>
+    <ul id="distanceLog"></ul>
+  </div>
+
+  <div class="box" id="currentData">
+    <h2>Aktuel Data</h2>
+    <div id="currentDataContent"></div>
+  </div>
+
+  <div class="box" id="temperatureBox">
+    <h2>Temp og Fugitghed Log</h2>
+    <ul id="temperatureHumidityLog"></ul>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    function addToLog(logId, data) {
+      var log = document.getElementById(logId);
+      var listItem = document.createElement('li');
+      listItem.textContent = 'Beboer 12 - ' + new Date().toLocaleString() + ' - ' + data;
+      log.insertBefore(listItem, log.firstChild);
+    }
+
+    function updateCurrentData(temperature, humidity, distance) {
+      var currentDataContent = document.getElementById('currentDataContent');
+      currentDataContent.textContent = 'Temperatur: ' + temperature + '°C, Fugtighed: ' + humidity + '%, Afstand: ' + distance + ' cm';
+    }
+
+    function showWarningEmoji(show) {
+      var warningEmoji = document.getElementById('warningEmoji');
+      warningEmoji.style.display = show ? 'block' : 'none';
+    }
+
+    setInterval(function () {
+      fetch('/get_data')
+        .then(response => response.json())
+        .then(data => {
+          var ultrasonicData = parseFloat(data.data);
+          var dht11Data = { temperature: Math.floor(Math.random() * 30) + 20, humidity: Math.floor(Math.random() * 50) + 30 };
+
+          addToLog('distanceLog', 'Afstand: ' + ultrasonicData + ' cm');
+          addToLog('temperatureHumidityLog', 'Temperatur: ' + dht11Data.temperature + '°C, Fugtighed: ' + dht11Data.humidity);
+          updateCurrentData(dht11Data.temperature, dht11Data.humidity, ultrasonicData);
+
+          // Opdater emoji baseret på afstanden
+          showWarningEmoji(ultrasonicData < 10);
+        })
+        .catch(error => console.error('Error fetching data:', error));
+    }, 2000);
+  });
+</script>
+
+</body>
+</html>
