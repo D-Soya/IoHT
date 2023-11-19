@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Data Dashboard</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: url('/static/Altiden-Fribo-Holte-friplejehjem.jpeg') center center fixed;
+      background-size: cover;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      height: 100vh;
+      position: relative;
+    }
+
+    h1, h2 {
+      color: rgb(12, 12, 12);
+    }
+
+    .container {
+      display: flex;
+      gap: 20px;
+      margin-top: 100px;
+    }
+
+    .box {
+      background-color: rgba(255, 255, 255, 0.9);
+      border: 1px solid #ddd;
+      padding: 20px;
+      width: 300px;
+      height: 250px;
+      overflow: auto;
+      border-radius: 15px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    ul {
+      list-style-type: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    li {
+      margin-bottom: 10px;
+      font-size: 16px;
+    }
+
+    header {
+      text-align: center;
+      padding: 0;
+      background-color: transparent;
+      margin: 0;
+      position: absolute;
+      top: 0;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    h1 {
+      font-size: 16px;
+      margin: 0;
+    }
+
+    #warningEmoji {
+      font-size: 10em;
+      position: absolute;
+      top: 200px;
+      left: 50%;
+      transform: translateX(-210%);
+      display: none;
+    }
+
+    #welcomeMessage {
+      font-size: 24px;
+      background-color: white;
+      padding: 10px;
+      border-radius: 5px;
+      display: inline-block;
+    }
+
+    #logoutButton {
+      background-color: #333;
+      color: #fff;
+      padding: 8px 12px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+  </style>
+</head>
+<body>
+
+<header>
+  <div id="welcomeMessage">Velkommen til Plejehjem Dashboard</div>
+  <button id="logoutButton" onclick="window.location.href='/logout'">Log ud</button>
+</header>
+
+<div id="warningEmoji">👳🏾‍♂️</div>
+
+<div class="container">
+  <div class="box" id="distanceBox">
+    <h2>Afstandsmåler Log</h2>
+    <ul id="distanceLog"></ul>
+  </div>
+
+  <div class="box" id="currentData">
+    <h2>Aktuel Data</h2>
+    <div id="currentDataContent"></div>
+  </div>
+
+  <div class="box" id="temperatureBox">
+    <h2>Temp og Fugitghed Log</h2>
+    <ul id="temperatureHumidityLog"></ul>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    var prevUltrasonicData = null;
+    var prevDht11Data = {
+      temperature: null,
+      humidity: null
+    };
+
+    function addToLog(logId, data) {
+      var log = document.getElementById(logId);
+      var listItem = document.createElement('li');
+      listItem.textContent = 'Beboer 12 - ' + data;
+      log.appendChild(listItem);
+    }
+
+    function updateCurrentData(temperature, humidity, distance) {
+      var currentDataContent = document.getElementById('currentDataContent');
+      currentDataContent.innerHTML = '<p>Temperatur: ' + temperature + '°C, Fugtighed: ' + humidity + '%, Afstand: ' + distance + ' cm</p>';
+    }
+
+    function showWarningEmoji(show) {
+      var warningEmoji = document.getElementById('warningEmoji');
+      warningEmoji.style.display = show ? 'block' : 'none';
+    }
+
+    function fetchAndUpdateData() {
+      fetch('/get_data')
+        .then(response => response.json())
+        .then(data => {
+          var ultrasonicData = parseFloat(data.currentData.distance);
+          var dht11Data = {
+            temperature: data.currentData.temperature !== null ? parseFloat(data.currentData.temperature) : 'NaN',
+            humidity: data.currentData.humidity !== null ? parseFloat(data.currentData.humidity) : 'NaN'
+          };
+
+          // Clear existing logs
+          document.getElementById('distanceLog').innerHTML = '';
+          document.getElementById('temperatureHumidityLog').innerHTML = '';
+
+          // Add new data to logs
+          data.historicalData.forEach(item => {
+            addToLog('distanceLog', item);
+          });
+
+          data.historicalData.forEach(item => {
+            addToLog('temperatureHumidityLog', item);
+          });
+
+          // Update current data
+          updateCurrentData(dht11Data.temperature, dht11Data.humidity, ultrasonicData);
+
+          showWarningEmoji(ultrasonicData < 10);
+        })
+        .catch(error => console.error('Error fetching data:', error));
+    }
+
+    // Fetch and update data initially
+    fetchAndUpdateData();
+
+    // Set up interval to fetch and update data every 1000 milliseconds (1 second)
+    setInterval(fetchAndUpdateData, 1000);
+  });
+</script>
+
+</body>
+</html>
