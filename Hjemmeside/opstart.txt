@@ -1,6 +1,9 @@
-source /home/ioht/myenv/bin/activate
+# Navigate to the directory containing your virtual environment
+cd /home/ioht/myenv
 
-start myenv "source myenv/bin/activate"
+# Activate the virtual environment
+source bin/activate
+
 
 start ngrok ""ngrok http 3000"
 
