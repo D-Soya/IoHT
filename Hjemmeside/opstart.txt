@@ -1,3 +1,5 @@
+source /home/ioht/myenv/bin/activate
+
 start myenv "source myenv/bin/activate"
 
 start ngrok ""ngrok http 3000"
