@@ -1,0 +1,6 @@
+CREATE TABLE sensor_data (
+                distance REAL,
+                temperature REAL,
+                humidity REAL,
+                timestamp TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime'))
+            )
