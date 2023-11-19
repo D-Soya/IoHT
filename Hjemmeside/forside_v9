@@ -1,121 +1,178 @@
-from flask import Flask, render_template, jsonify
-import paho.mqtt.client as mqtt
-import sqlite3
-import os
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Data Dashboard</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: url('/static/Altiden-Fribo-Holte-friplejehjem.jpeg') center center fixed;
+      background-size: cover;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      height: 100vh;
+      position: relative;
+    }
 
+    h1, h2 {
+      color: rgb(12, 12, 12);
+    }
 
-app = Flask(__name__, template_folder='templates', static_folder='static')
-data_from_mqtt = {'distance': None, 'temperature': None, 'humidity': None}
+    .container {
+      display: flex;
+      gap: 20px;
+      margin-top: 100px;
+    }
 
-mqtt_server = "192.168.50.115"
-mqtt_port = 1883
-mqtt_user = "ioht"
-mqtt_password = "kasper3600"
-ultrasonic_topic = "ultrasonic"
-dht_topic = "dht"
+    .box {
+      background-color: rgba(255, 255, 255, 0.9);
+      border: 1px solid #ddd;
+      padding: 20px;
+      width: 300px;
+      height: 250px;
+      overflow: auto;
+      border-radius: 15px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
 
-# SQLite database configuration
-database_path = 'ioht_database.db'
+    ul {
+      list-style-type: none;
+      padding: 0;
+      margin: 0;
+    }
 
-def initialize_database():
-    if not os.path.exists(database_path):
-        connection = sqlite3.connect(database_path)
-        cursor = connection.cursor()
+    li {
+      margin-bottom: 10px;
+      font-size: 16px;
+    }
 
-        # Create the 'sensor_data' table
-        cursor.execute('''
-            CREATE TABLE sensor_data (
-                distance REAL,
-                temperature REAL,
-                humidity REAL,
-                timestamp TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime'))
-            )
-        ''')
+    header {
+      text-align: center;
+      padding: 0;
+      background-color: transparent;
+      margin: 0;
+      position: absolute;
+      top: 0;
+      width: 100%;
+      box-sizing: border-box;
+    }
 
-        connection.commit()
-        connection.close()
+    h1 {
+      font-size: 16px;
+      margin: 0;
+    }
 
+    #warningEmoji {
+      font-size: 10em;
+      position: absolute;
+      top: 200px;
+      left: 50%;
+      transform: translateX(-210%);
+      display: none;
+    }
 
+    #welcomeMessage {
+      font-size: 24px;
+      background-color: white;
+      padding: 10px;
+      border-radius: 5px;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
 
+<header>
+  <div id="welcomeMessage">Velkommen til Plejehjem Dashboard</div>
+</header>
 
-def query_database():
-    connection = sqlite3.connect(database_path)
-    cursor = connection.cursor()
+<div id="warningEmoji">👳🏾‍♂️</div>
 
-    cursor.execute("SELECT distance, temperature, humidity, timestamp FROM sensor_data ORDER BY timestamp DESC")
-    result = cursor.fetchall()
+<div class="container">
+  <div class="box" id="distanceBox">
+    <h2>Afstandsmåler Log</h2>
+    <ul id="distanceLog"></ul>
+  </div>
 
-    connection.close()
+  <div class="box" id="currentData">
+    <h2>Aktuel Data</h2>
+    <div id="currentDataContent"></div>
+  </div>
 
-    return result
+  <div class="box" id="temperatureBox">
+    <h2>Temp og Fugitghed Log</h2>
+    <ul id="temperatureHumidityLog"></ul>
+  </div>
+</div>
 
-def update_data_from_database():
-    db_data = query_database()
-    if db_data:
-        latest_data = db_data[0]
-        data_from_mqtt.update({'distance': latest_data[0], 'temperature': latest_data[1], 'humidity': latest_data[2]})
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    var prevUltrasonicData = null;
+    var prevDht11Data = {
+      temperature: null,
+      humidity: null
+    };
 
-def insert_data_into_database(distance, temperature, humidity):
-    connection = sqlite3.connect(database_path)
-    cursor = connection.cursor()
+    function addToLog(logId, data) {
+      var log = document.getElementById(logId);
+      var listItem = document.createElement('li');
+      listItem.textContent = 'Beboer 12 - ' + data;
+      log.appendChild(listItem);
+    }
 
-    cursor.execute("INSERT INTO sensor_data (distance, temperature, humidity) VALUES (?, ?, ?)",
-                   (distance, temperature, humidity))
+    function updateCurrentData(temperature, humidity, distance) {
+      var currentDataContent = document.getElementById('currentDataContent');
+      currentDataContent.innerHTML = '<p>Temperatur: ' + temperature + '°C, Fugtighed: ' + humidity + '%, Afstand: ' + distance + ' cm</p>';
+    }
 
-    connection.commit()
-    connection.close()
+    function showWarningEmoji(show) {
+      var warningEmoji = document.getElementById('warningEmoji');
+      warningEmoji.style.display = show ? 'block' : 'none';
+    }
 
-def on_connect(client, userdata, flags, rc):
-    print(f"Connected with result code {rc}")
-    client.subscribe(ultrasonic_topic)
-    client.subscribe(dht_topic)
+    function fetchAndUpdateData() {
+      fetch('/get_data')
+        .then(response => response.json())
+        .then(data => {
+          var ultrasonicData = parseFloat(data.currentData.distance);
+          var dht11Data = {
+            temperature: data.currentData.temperature !== null ? parseFloat(data.currentData.temperature) : 'NaN',
+            humidity: data.currentData.humidity !== null ? parseFloat(data.currentData.humidity) : 'NaN'
+          };
 
-def on_message(client, userdata, msg):
-    global data_from_mqtt
-    payload = msg.payload.decode()
+          // Clear existing logs
+          document.getElementById('distanceLog').innerHTML = '';
+          document.getElementById('temperatureHumidityLog').innerHTML = '';
 
-    if msg.topic == ultrasonic_topic:
-        distance = float(payload)
-        data_from_mqtt['distance'] = distance
-    elif msg.topic == dht_topic:
-        temperature_parts = payload.split('Temperature:')
-        humidity_parts = payload.split('Humidity:')
-        
-        if len(temperature_parts) > 1 and len(humidity_parts) > 1:
-            try:
-                temperature = float(temperature_parts[1].split(',')[0])
-                humidity = float(humidity_parts[1])
-                
-                data_from_mqtt['temperature'] = temperature
-                data_from_mqtt['humidity'] = humidity
+          // Add new data to logs
+          data.historicalData.forEach(item => {
+            addToLog('distanceLog', item);
+          });
 
-                distance = data_from_mqtt['distance']
-                insert_data_into_database(distance, temperature, humidity)
-            except ValueError as e:
-                print(f"Error converting values: {e}")
+          data.historicalData.forEach(item => {
+            addToLog('temperatureHumidityLog', item);
+          });
 
-    print(f"Received message on topic {msg.topic}: {payload}")
+          // Update current data
+          updateCurrentData(dht11Data.temperature, dht11Data.humidity, ultrasonicData);
 
-client = mqtt.Client()
-client.username_pw_set(mqtt_user, mqtt_password)
-client.on_connect = on_connect
-client.on_message = on_message
+          showWarningEmoji(ultrasonicData < 10);
+        })
+        .catch(error => console.error('Error fetching data:', error));
+    }
 
-client.connect(mqtt_server, mqtt_port, 60)
-client.loop_start()
+    // Fetch and update data initially
+    fetchAndUpdateData();
 
-initialize_database()
+    // Set up interval to fetch and update data every 1000 milliseconds (1 second)
+    setInterval(fetchAndUpdateData, 1000);
+  });
+</script>
 
-@app.route('/')
-def index():
-    update_data_from_database()
-    return render_template('index.html', dataFromMQTT=data_from_mqtt)
-
-@app.route('/get_data')
-def get_data():
-    update_data_from_database()
-    historical_data = [f"Afstand: {row[0]} cm, Temperatur: {row[1]}°C, Fugtighed: {row[2]}%, Tid: {row[3]}" for row in query_database()]
-    return jsonify({'currentData': data_from_mqtt, 'historicalData': historical_data})
-
-if __name__ == '__main__':
-    app.run(debug=True, host='127.0.0.1', port=3000, use_reloader=False)
+</body>
+</html>
