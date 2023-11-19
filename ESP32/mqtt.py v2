@@ -5,7 +5,7 @@ from umqtt.simple import MQTTClient
 import dht
 
 ssid = "Nikolaj"
-password = "Lindealle43600"
+password = "kode"
 mqtt_server = "192.168.50.115"
 mqtt_port = 1883
 mqtt_user = "ioht"
