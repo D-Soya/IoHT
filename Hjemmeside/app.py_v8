@@ -1,0 +1,257 @@
+from flask import Flask, render_template, jsonify, request, redirect, url_for, flash, session
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask_mail import Mail, Message
+import paho.mqtt.client as mqtt
+import sqlite3
+import os
+from flask_wtf import FlaskForm
+from wtforms import StringField, PasswordField, SubmitField
+
+app = Flask(__name__, template_folder='templates', static_folder='static')
+app.secret_key = '37bdb12360c37758e3984034a8f1b029e5fd414ce851a002'
+
+# Flask-Mail konfiguration
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 465
+app.config['MAIL_USE_SSL'] = True
+app.config['MAIL_USERNAME'] = 'kltn20000@gmail.com'  # Opdater med din Gmail-brugernavn
+app.config['MAIL_PASSWORD'] = 'kkke tqot euqd fjir'  # Opdater med din Gmail-app-adgangskode
+
+mail = Mail(app)
+
+# Flask-Login konfiguration
+login_manager = LoginManager(app)
+login_manager.login_view = 'login'
+
+# Brugerklasse
+class User(UserMixin):
+    def __init__(self, user_id, username):
+        self.id = user_id
+        self.username = username
+
+    @property
+    def is_active(self):
+        return True
+
+    @is_active.setter
+    def is_active(self, value):
+        pass
+
+# Brugerdata
+users = {
+    'kasper': {'password': 'kasper', 'name': 'kasper', 'email': 'kltn20000@gmail.com'},
+    'jens': {'password': 'jens', 'name': 'jens', 'email': 'jens@gmail.com'}
+}
+
+@login_manager.user_loader
+def load_user(user_id):
+    user_data = users.get(user_id)
+    if user_data:
+        return User(user_id, user_data['name'])
+    return None
+
+# Login formular
+class ExtendedLoginForm(FlaskForm):
+    username = StringField('Username')
+    password = PasswordField('Password')
+    second_factor = StringField('Second Factor')
+    submit = SubmitField('Log In')
+
+# Formular for engangskode
+class OtpForm(FlaskForm):
+    otp = StringField('One-Time Password')
+    submit = SubmitField('Verify')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    form = ExtendedLoginForm()
+    otp_form = OtpForm()
+
+    if form.validate_on_submit():
+        username = form.username.data
+        password = form.password.data
+
+        # Implementer din logik for at sende engangskode via e-mail her
+        auth_code = generate_and_send_auth_code(username)
+
+        # Gem brugeroplysninger i sessionen for at bruge dem senere
+        session['username'] = username
+        session['password'] = password
+        session['auth_code'] = auth_code
+
+        return render_template('verify_otp.html', otp_form=otp_form)
+
+    return render_template('login.html', form=form)
+
+@app.route('/verify_otp', methods=['POST'])
+def verify_otp():
+    otp_form = OtpForm()
+
+    if otp_form.validate_on_submit():
+        entered_otp = otp_form.otp.data
+        expected_otp = session.get('auth_code')
+
+        if entered_otp == expected_otp:
+            # Log brugeren ind, da engangskoden er korrekt
+            username = session.get('username')
+            password = session.get('password')
+
+            user_data = users.get(username)
+            if user_data and password == user_data['password']:
+                user = load_user(username)
+                login_user(user)
+                return redirect(url_for('index'))
+        
+    flash('Incorrect one-time password. Try again.', 'error')
+    return redirect(url_for('login'))
+
+def generate_and_send_auth_code(username):
+    # Generate a random authentication code (you need to implement this)
+    auth_code = generate_random_code()
+
+    # Send authentication code via email
+    send_auth_code_via_email(username, auth_code)
+
+    return auth_code
+
+def send_auth_code_via_email(username, auth_code):
+    # Use Flask-Mail to send email
+    msg = Message('Authentication Code', sender='your@gmail.com', recipients=[get_user_email(username)])
+    msg.body = f'Your authentication code is: {auth_code}'
+    mail.send(msg)
+
+def get_user_email(username):
+    # Get the email address for the user (you need to implement this based on your user database)
+    return users.get(username, {}).get('email', '')
+
+def generate_random_code(length=6):
+    import random
+    import string
+    characters = string.ascii_letters + string.digits
+    return ''.join(random.choice(characters) for i in range(length))
+
+# MQTT configuration
+mqtt_server = "192.168.50.115"
+mqtt_port = 1883
+mqtt_user = "ioht"
+mqtt_password = "kasper3600"
+ultrasonic_topic = "ultrasonic"
+dht_topic = "dht"
+
+# SQLite database configuration
+database_path = 'ioht_database.db'
+
+def initialize_database():
+    if not os.path.exists(database_path):
+        connection = sqlite3.connect(database_path)
+        cursor = connection.cursor()
+
+        # Create the 'sensor_data' table
+        cursor.execute('''
+            CREATE TABLE sensor_data (
+                distance REAL,
+                temperature REAL,
+                humidity REAL,
+                timestamp TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime'))
+            )
+        ''')
+
+        connection.commit()
+        connection.close()
+
+def query_database():
+    connection = sqlite3.connect(database_path)
+    cursor = connection.cursor()
+
+    cursor.execute("SELECT distance, temperature, humidity, timestamp FROM sensor_data ORDER BY timestamp DESC")
+    result = cursor.fetchall()
+
+    connection.close()
+
+    return result
+
+def update_data_from_database():
+    db_data = query_database()
+    if db_data:
+        latest_data = db_data[0]
+        data_from_mqtt.update({'distance': latest_data[0], 'temperature': latest_data[1], 'humidity': latest_data[2]})
+
+def insert_data_into_database(distance, temperature, humidity):
+    connection = sqlite3.connect(database_path)
+    cursor = connection.cursor()
+
+    cursor.execute("INSERT INTO sensor_data (distance, temperature, humidity) VALUES (?, ?, ?)",
+                   (distance, temperature, humidity))
+
+    connection.commit()
+    connection.close()
+
+def on_connect(client, userdata, flags, rc):
+    print(f"Connected with result code {rc}")
+    client.subscribe(ultrasonic_topic)
+    client.subscribe(dht_topic)
+
+def on_message(client, userdata, msg):
+    global data_from_mqtt
+    payload = msg.payload.decode()
+
+    if msg.topic == ultrasonic_topic:
+        distance = float(payload)
+        data_from_mqtt['distance'] = distance
+    elif msg.topic == dht_topic:
+        temperature_parts = payload.split('Temperature:')
+        humidity_parts = payload.split('Humidity:')
+        
+        if len(temperature_parts) > 1 and len(humidity_parts) > 1:
+            try:
+                temperature = float(temperature_parts[1].split(',')[0])
+                humidity = float(humidity_parts[1])
+                
+                data_from_mqtt['temperature'] = temperature
+                data_from_mqtt['humidity'] = humidity
+
+                distance = data_from_mqtt['distance']
+                insert_data_into_database(distance, temperature, humidity)
+            except ValueError as e:
+                print(f"Error converting values: {e}")
+
+    print(f"Received message on topic {msg.topic}: {payload}")
+
+client = mqtt.Client()
+client.username_pw_set(mqtt_user, mqtt_password)
+client.on_connect = on_connect
+client.on_message = on_message
+
+data_from_mqtt = {'distance': 0, 'temperature': 0, 'humidity': 0}
+
+@app.route('/')
+@login_required
+def index():
+    update_data_from_database()
+    return render_template('index.html', data_from_mqtt=data_from_mqtt)
+
+@app.route('/get_data')
+def get_data():
+    # Implement logic to fetch data from the database and return it as JSON
+    # ...
+
+    return jsonify({
+        'currentData': {
+            'distance': data_from_mqtt['distance'],
+            'temperature': data_from_mqtt['temperature'],
+            'humidity': data_from_mqtt['humidity'],
+        },
+        'historicalData': query_database(),
+    })
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
+
+if __name__ == '__main__':
+    initialize_database()
+    client.connect(mqtt_server, mqtt_port, 60)
+    client.loop_start()
+    app.run(debug=True, host='127.0.0.1', port=5000, use_reloader=False)
